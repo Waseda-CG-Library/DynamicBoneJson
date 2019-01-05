@@ -60,11 +60,11 @@ namespace DynamicBoneJson
             dst["Colliders"] = db.m_Colliders.Select(t => t == null ? null : t.name);
             if (db.m_Exclusions.Count != 0) dst["Exclusions"] = db.m_Exclusions.Select(t => t == null ? null : t.name);
 
-            if (db.m_FreezeAxis != DynamicBone.FreezeAxis.None) dst["FreezeAxis"] = db.m_FreezeAxis;
+            if (db.m_FreezeAxis != DynamicBone.FreezeAxis.None) dst["FreezeAxis"] = db.m_FreezeAxis.ToString();
             if (db.m_DistantDisable != false) dst["DistantDisable"] = db.m_DistantDisable;
             if (db.m_ReferenceObject != null) dst["ReferenceObject"] = db.m_ReferenceObject.name;
             if (db.m_DistanceToObject != 20.0f) dst["DistanceToObject"] = db.m_DistanceToObject;
-            
+
             return dst;
         }
 
@@ -86,14 +86,45 @@ namespace DynamicBoneJson
             return dst;
         }
 
+        static Dictionary<string, object> ColliderToJson(DynamicBoneColliderBase cb)
+        {
+            var dst = new Dictionary<string, object>();
+
+            dst["Type"] = cb.GetType().ToString();
+
+            dst["Direction"] = cb.m_Direction.ToString();
+            dst["Center"] = cb.m_Center.ToArray();
+            dst["Bound"] = cb.m_Bound;
+
+            var c = cb as DynamicBoneCollider;
+            if (c != null)
+            {
+                dst["Radius"] = c.m_Radius;
+                dst["Height"] = c.m_Height;
+            }
+
+            return dst;
+        }
+
+        static Dictionary<string, object> CreateCollidersDict(Transform root)
+        {
+            var dst = new Dictionary<string, object>();
+
+            foreach (var cb in root.GetComponentsInChildren<DynamicBoneColliderBase>())
+            {
+                dst[cb.name] = ColliderToJson(cb);
+            }
+
+            return dst;
+        }
+
         static Dictionary<string, object> CreateDict(Transform root)
         {
-            var collidersDict = new Dictionary<string, object>();
             var rootDict = new Dictionary<string, object>
             {
                 ["ObjectName"] = root.name,
                 ["DynamicBone"] = CreateBonesDict(root),
-                ["DynamicBoneCollider"] = collidersDict,
+                ["Collider"] = CreateCollidersDict(root),
             };
 
             return rootDict;
@@ -107,7 +138,7 @@ namespace DynamicBoneJson
             string line;
             while ((line = sr.ReadLine()) != null)
             {
-                dst += line.TrimStart();
+                dst += ' ' + line.TrimStart();
             }
 
             dst += Environment.NewLine;
@@ -115,7 +146,7 @@ namespace DynamicBoneJson
             return dst;
         }
 
-        static void WriteText(string json)
+        static void WriteText(string json, string rootName)
         {
             json = json.Replace("{}\r\n", "{\r\n}\r\n")
                        .Replace("{},\r\n", "{\r\n},\r\n")
@@ -128,7 +159,12 @@ namespace DynamicBoneJson
 
             var reg = new Regex(pattern, RegexOptions.Singleline);
             json = reg.Replace(json, DeleteIndent);
-            Debug.Log(json);
+
+            string path = EditorUtility.SaveFilePanel("Export Json", "", rootName, "json");
+            using (var sw = new StreamWriter(path))
+            {
+                sw.Write(json);
+            }
         }
 
         static (bool success, string message) ExportJson()
@@ -138,7 +174,7 @@ namespace DynamicBoneJson
 
             var rootDict = CreateDict(root);
             string json = JsonConvert.SerializeObject(rootDict, Formatting.Indented);
-            WriteText(json);
+            WriteText(json, root.name);
 
             return (true, null);
         }
